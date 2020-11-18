@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  demo-signup-signin
+
+  Sample SAM Template for demo-signup-signin
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 60
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: Demo-SignUp-SignIn-HelloWorld
+      Description: Authorization Testing
+      Role: arn:aws:iam::534678543881:role/admin_access #arn:aws:iam::534678543881:role/hello-world-HelloWorldFunctionRole-A2N473AFEKHH
+      CodeUri: hello_world/
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Events:
+        HelloApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /demo-auth-api
+            Method: get
+
+  SignUpFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: DemoSignUp-01
+      Description: Sam Demo (Demo-SignUp)
+      Role: arn:aws:iam::534678543881:role/admin_access #arn:aws:iam::534678543881:role/hello-world-HelloWorldFunctionRole-A2N473AFEKHH
+      CodeUri: signup/
+      Handler: signup.lambda_handler
+      Runtime: python3.7
+      Events:
+        SignUpApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /signup
+            Auth:
+              Authorizer: 'NONE'
+            Method: post
+
+  SignInFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: DemoSignIn-01
+      Description: Sam Demo (Demo-SignIn)
+      Role: arn:aws:iam::534678543881:role/admin_access #arn:aws:iam::534678543881:role/hello-world-HelloWorldFunctionRole-A2N473AFEKHH
+      CodeUri: signin/
+      Handler: signin.lambda_handler
+      Runtime: python3.7
+      Events:
+        SignInApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /signin
+            Auth:
+              Authorizer: 'NONE'
+            Method: put
+
+  UpdateFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      FunctionName: DemoUpdate-01
+      Description: Sam Demo (Demo-SignIn)
+      Role: arn:aws:iam::534678543881:role/admin_access #arn:aws:iam::534678543881:role/hello-world-HelloWorldFunctionRole-A2N473AFEKHH
+      CodeUri: update/
+      Handler: update_user.lambda_handler
+      Runtime: python3.7
+      Events:
+        SignInApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            RestApiId: !Ref MyApi
+            Path: /update
+            Auth:
+              Authorizer: 'NONE'
+            Method: post
+  PreSignUp:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: triggers/
+      Handler: presignup.pre_sign_up
+      Runtime: python3.7
+  PreSignUpInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt PreSignUp.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt MyCognitoUserPool.Arn
+
+  MyCognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: demo-signup-signin
+      AutoVerifiedAttributes:
+        - email
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_LINK
+      EmailVerificationSubject: 'Your verification link'
+      EmailVerificationMessage: 'Please click the link below to verify your email address. {####}' # fails because {####} is required
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: location
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+      LambdaConfig:
+        PreSignUp: !GetAtt PreSignUp.Arn
+
+  MyCognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref MyCognitoUserPool
+      ClientName: sam-cognito-client
+      GenerateSecret: true
+      ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        #- ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_CUSTOM_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors: "'*'"
+      Auth:
+        DefaultAuthorizer: MyCognitoAuthorizer
+        Authorizers:
+          MyCognitoAuthorizer:
+            UserPoolArn: !GetAtt MyCognitoUserPool.Arn
+
